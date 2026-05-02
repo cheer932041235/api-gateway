@@ -1,0 +1,7 @@
+# API Gateway - Dependencies
+# Claude Desktop proxy
+flask>=3.0
+requests>=2.31
+
+# Codex CLI / Claude Code proxy
+aiohttp>=3.9
