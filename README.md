@@ -1,7 +1,7 @@
 # API Gateway
 
 <p align="center">
-  <img src="docs/api-gateway-banner.png" alt="API Gateway Architecture" width="800">
+  <img src="docs/api-gateway-banner.png" alt="API Gateway 架构图" width="800">
 </p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -9,45 +9,45 @@
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000.svg)](https://flask.palletsprojects.com)
 [![aiohttp](https://img.shields.io/badge/aiohttp-3.9-2c5bb4.svg)](https://docs.aiohttp.org)
 
-**Make Claude Desktop & Codex CLI work with any third-party model provider.**
+**让 Claude Desktop 和 Codex CLI 接入任意第三方模型。**
 
-Claude Desktop's 3p (third-party) mode and Codex CLI / Claude Code only connect to official APIs by default. This project provides a local proxy layer that enables **multi-provider routing + automatic protocol translation**, so you can freely use any third-party model in these tools.
+Claude Desktop 的 3P（第三方）模式和 Codex CLI / Claude Code 默认只能连接官方 API。本项目提供本地代理层，实现**多提供商路由 + 协议自动转换**，让你在这些工具中自由使用各种第三方模型。
 
-[English](#why-this-project) | [中文](#中文说明)
-
----
-
-## Why This Project?
-
-Using AI coding tools (Claude Desktop, Codex CLI, Claude Code) with official APIs faces several real-world barriers:
-
-**Cost** — Claude Sonnet 4 API costs $3/$15 per 1M tokens. A full day of coding (30-50 refactoring sessions) costs $11-19/day, or **$300-500/month**. That's more expensive than hiring a junior developer in many regions.
-
-**Payment** — OpenAI and Anthropic only accept US/EU credit cards. Users in many countries simply **cannot pay** for official API access, regardless of willingness.
-
-**Network** — `api.openai.com` and `api.anthropic.com` are blocked in some regions. Even with a valid API key, direct connections fail without a VPN.
-
-**Protocol Lock-in** — Claude Desktop speaks Anthropic's Messages API. If your model provider uses OpenAI's Chat Completions API, you're stuck — unless something translates between the two formats.
-
-**This project solves all four problems.** It lets you connect to affordable third-party providers (relay stations, self-hosted proxies, regional model providers) and handles all the protocol translation automatically. One proxy, any model, any provider.
+[中文](#为什么做这个项目) | [English](#english)
 
 ---
 
-## What Are These Tools?
+## 为什么做这个项目？
+
+用官方 API 跑 AI 编程工具，有四个真实的痛点：
+
+**贵** — Claude Sonnet 4 按量计费 $3/$15 每百万 token。连续编程一天（30-50 次重构）花 $11-19，**一个月 $300-500**。比很多地方雇初级开发还贵。
+
+**买不了** — OpenAI 和 Anthropic 只收美国/欧洲信用卡。国内用户**根本没法直接付款**，不是不想买，是买不了。
+
+**连不上** — `api.openai.com` 和 `api.anthropic.com` 在国内被墙。即使有 Key，不开代理也调不通。
+
+**协议不通** — Claude Desktop 发的是 Anthropic Messages API 格式。你的中转站如果只支持 OpenAI Chat Completions 格式，就对不上——除非有东西在中间做翻译。
+
+**本项目一次性解决以上所有问题。** 接入便宜的中转站/自建反代/国产模型，协议自动转换，一个代理搞定一切。
+
+---
+
+## 这些工具是什么？
 
 ### Claude Desktop
 
-[Claude Desktop](https://claude.ai/download) is Anthropic's desktop client for Claude. In **3P (Third-Party) mode**, it can connect to any API endpoint instead of Anthropic's servers — this is what makes the gateway possible.
+[Claude Desktop](https://claude.ai/download) 是 Anthropic 的桌面客户端。在 **3P（Third-Party）模式**下，它可以连接任意 API 端点而不是 Anthropic 官方服务器——这就是本网关的工作基础。
 
-**Setup notes:**
-- Download from [claude.ai/download](https://claude.ai/download) (Windows / macOS)
-- Enable Developer Mode: **Help → Troubleshooting → Enable Developer Mode**
-- Configure Gateway: **Developer → Configure Third-Party Inference**
-- Gateway URL must use `http://127.0.0.1:port` (not `localhost`)
+**安装配置：**
+- 从 [claude.ai/download](https://claude.ai/download) 下载（Windows / macOS）
+- 启用开发者模式：**Help → Troubleshooting → Enable Developer Mode**
+- 配置 Gateway：**Developer → Configure Third-Party Inference**
+- Gateway URL 必须用 `http://127.0.0.1:端口`，不能用 `localhost`
 
 ### Codex CLI
 
-[Codex CLI](https://github.com/openai/codex) is OpenAI's open-source CLI coding agent. It uses the OpenAI API by default, but with `codex-proxy.py`, you can run it through any provider.
+[Codex CLI](https://github.com/openai/codex) 是 OpenAI 开源的命令行编程 Agent。默认走 OpenAI API，通过 `codex-proxy.py` 可以接入任意提供商。
 
 ```bash
 npm install -g @openai/codex
@@ -55,44 +55,44 @@ npm install -g @openai/codex
 
 ### Claude Code
 
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) is Anthropic's CLI coding assistant. It's a terminal-based agent that can read, write, and execute code autonomously.
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) 是 Anthropic 的命令行编程助手。终端式 Agent，支持自主读写代码、执行命令、Sub-agent 并行。
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-> For detailed troubleshooting (MSIX path bugs, registry quirks, Cowork VM issues, etc.), see **[docs/troubleshooting.md](docs/troubleshooting.md)**.
+> 详细的踩坑指南（MSIX 路径 bug、注册表配置、Cowork VM 问题等）见 **[docs/troubleshooting.md](docs/troubleshooting.md)**
 
 ---
 
-## Architecture
+## 架构
 
 ```mermaid
 graph TB
-    subgraph Clients
-        CD["Claude Desktop<br/>(3p Mode)"]
+    subgraph 客户端
+        CD["Claude Desktop<br/>(3P 模式)"]
         CC["Codex CLI /<br/>Claude Code"]
     end
 
-    subgraph API Gateway
+    subgraph API Gateway 代理层
         P["proxy.py<br/>:8082"]
         CP["codex-proxy.py<br/>:5678"]
-        Panel["Control Panel<br/>:8083"]
+        Panel["控制面板<br/>:8083"]
     end
 
-    subgraph Providers
+    subgraph 模型提供商
         SP["SophNet<br/>DeepSeek, Doubao, Kimi, GLM..."]
         AP["aiproxies.cc<br/>GPT-5.5, GPT-4o..."]
-        MI["Xiaomi MiMo<br/>MiMo-V2.5-Pro..."]
+        MI["小米 MiMo<br/>MiMo-V2.5-Pro..."]
     end
 
     CD -->|"Anthropic API"| P
     CC -->|"Anthropic API"| CP
-    P -->|"Anthropic (passthrough)"| SP
-    P -->|"Anthropic → OpenAI"| AP
-    P -->|"Anthropic (passthrough)"| MI
-    CP -->|"Anthropic → OpenAI"| AP
-    Panel -.->|"model switch"| P
+    P -->|"Anthropic 直转"| SP
+    P -->|"Anthropic → OpenAI 协议转换"| AP
+    P -->|"Anthropic 直转"| MI
+    CP -->|"Anthropic → OpenAI 协议转换"| AP
+    Panel -.->|"切换模型"| P
 
     style CD fill:#6b4fbb,color:#fff
     style CC fill:#6b4fbb,color:#fff
@@ -104,146 +104,147 @@ graph TB
     style MI fill:#00a67e,color:#fff
 ```
 
-## Features
+## 功能特性
 
-- **Multi-Provider Gateway** — Route Claude Desktop to multiple model providers through a single proxy, with a browser-based control panel for instant model switching
-- **Protocol Translation** — Bidirectional Anthropic <-> OpenAI format translation with full support for streaming and tool use
-- **Image Input** — Automatically converts Anthropic image blocks to OpenAI `image_url` format
-- **Image Generation** — Detects image generation requests and routes them to OpenAI Responses API (DALL-E)
-- **Process Resilience** — Global exception handler + auto-restart loop ensures the proxy never crashes from upstream API errors
-- **Centralized Key Management** — All API keys stored in `secrets.json` (gitignored), zero hardcoded credentials
+- **多提供商网关** — 一个代理接入多个模型提供商，浏览器控制面板一键切换模型
+- **协议自动转换** — Anthropic ↔ OpenAI 格式双向翻译，完整支持流式输出和 Tool Use
+- **图片输入** — 自动将 Anthropic 图片格式转为 OpenAI `image_url` 格式
+- **AI 生图** — 检测生图请求自动路由到 OpenAI Responses API（DALL-E）
+- **进程保活** — 全局异常捕获 + 自动重启循环，不会因为上游 API 报错而崩溃
+- **密钥集中管理** — 所有 API Key 存储在 `secrets.json`（gitignored），代码零硬编码
 
-## Supported Providers
+## 支持的提供商
 
-| Provider | Models | Protocol | Notes |
-|----------|--------|----------|-------|
-| **SophNet** | DeepSeek-V4-Flash, DeepSeek-V4-Pro, GPT-4o-mini, Doubao-Seed-1.6, MiniMax, Kimi, GLM | Anthropic-compatible | Direct passthrough |
-| **aiproxies.cc** | GPT-5.5, GPT-5.4, GPT-4o | OpenAI | Auto-translated to/from Anthropic format |
-| **Xiaomi MiMo** | MiMo-V2.5-Pro, MiMo-V2.5, MiMo-V2-Pro | Anthropic-compatible | Direct passthrough |
+| 提供商 | 模型 | 协议 | 备注 |
+|--------|------|------|------|
+| **SophNet** | DeepSeek-V4-Flash, DeepSeek-V4-Pro, GPT-4o-mini, Doubao-Seed-1.6, MiniMax, Kimi, GLM | Anthropic 兼容 | 直接透传 |
+| **aiproxies.cc** | GPT-5.5, GPT-5.4, GPT-4o | OpenAI | 自动协议转换 |
+| **小米 MiMo** | MiMo-V2.5-Pro, MiMo-V2.5, MiMo-V2-Pro | Anthropic 兼容 | 直接透传 |
 
-> Adding a new provider takes ~20 lines of code. See [Adding New Providers](#adding-new-providers).
+> 添加新提供商只需 ~20 行代码，见[添加新提供商](#添加新提供商)。
 
-## Quick Start
+## 快速开始
 
-### 1. Install dependencies
+### 1. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure API keys
+### 2. 配置密钥
 
 ```bash
 cp secrets.example.json secrets.json
-# Edit secrets.json with your actual API keys
+# 编辑 secrets.json，填入你的 API Key
 ```
 
 <details>
-<summary><b>secrets.json format</b></summary>
+<summary><b>secrets.json 格式</b></summary>
 
 ```json
 {
-  "aiproxies_key": "sk-your-aiproxies-key",
-  "mimo_key": "sk-your-mimo-key",
-  "qwen_key": "sk-your-qwen-key",
-  "vectorengine_key": "sk-your-vectorengine-key"
+  "aiproxies_key": "sk-你的aiproxies密钥",
+  "mimo_key": "sk-你的mimo密钥",
+  "qwen_key": "sk-你的qwen密钥",
+  "vectorengine_key": "sk-你的vectorengine密钥"
 }
 ```
 
 </details>
 
-### 3. Start the proxy
+### 3. 启动代理
 
 ```bash
-# Claude Desktop gateway (Proxy :8082 + Control Panel :8083)
+# Claude Desktop 网关代理（代理 :8082 + 控制面板 :8083）
 python proxy.py
 
-# Codex CLI protocol proxy (:5678)
+# Codex CLI 协议转换代理（:5678）
 python codex-proxy.py
 ```
 
-### 4. Configure Claude Desktop
+### 4. 配置 Claude Desktop
 
-Create a 3p mode config file at `%LOCALAPPDATA%\Claude-3p\configLibrary\<uuid>.json`:
+在 `%LOCALAPPDATA%\Claude-3p\configLibrary\<uuid>.json` 创建 3P 模式配置文件：
 
 ```json
 {
   "inferenceProvider": "gateway",
   "inferenceGatewayBaseUrl": "http://127.0.0.1:8082",
-  "inferenceGatewayApiKey": "<your-upstream-api-key>",
+  "inferenceGatewayApiKey": "<你的上游API密钥>",
   "inferenceGatewayAuthScheme": "x-api-key"
 }
 ```
 
-Register available models in the Windows Registry:
+在 Windows 注册表中注册可用模型：
 
 ```powershell
 Set-ItemProperty -Path "HKCU:\SOFTWARE\Policies\Claude" -Name "inferenceModels" `
   -Value '["DeepSeek-V4-Flash","gpt-5.5","MiMo-V2.5-Pro"]' -Type String
 ```
 
-### 5. Configure Codex CLI / Claude Code
+### 5. 配置 Codex CLI / Claude Code
 
 ```bash
 export ANTHROPIC_BASE_URL=http://127.0.0.1:5678
 export ANTHROPIC_API_KEY=sk-any-placeholder
-codex  # or claude
+codex  # 或 claude
 ```
 
-Or use the endpoint switcher (PowerShell):
+或使用端点切换器（PowerShell）：
 
 ```powershell
-. .\scripts\claude-switch.ps1 codex    # Local proxy → GPT-5.4
-. .\scripts\claude-switch.ps1 qwen     # Self-hosted → Qwen
+. .\scripts\claude-switch.ps1 codex    # 本地代理 → GPT-5.4
+. .\scripts\claude-switch.ps1 qwen     # 自建反代 → Qwen
 . .\scripts\claude-switch.ps1 vector   # VectorEngine → Claude
-. .\scripts\claude-switch.ps1 list     # List all endpoints
+. .\scripts\claude-switch.ps1 list     # 列出所有端点
 ```
 
-## Project Structure
+## 项目结构
 
 ```
 api-gateway/
-├── proxy.py                  # Claude Desktop multi-provider gateway proxy
-├── codex-proxy.py            # Codex CLI / Claude Code protocol translation proxy
-├── requirements.txt          # Python dependencies
-├── secrets.example.json      # API key template (safe to commit)
+├── proxy.py                  # Claude Desktop 多提供商网关代理
+├── codex-proxy.py            # Codex CLI / Claude Code 协议转换代理
+├── requirements.txt          # Python 依赖
+├── secrets.example.json      # 密钥模板（可安全提交）
 ├── scripts/
-│   ├── claude-switch.ps1     # Claude Code endpoint switcher
-│   ├── proxy-loop.bat        # Auto-restart loop
-│   └── start-proxy.vbs       # Windows silent startup (for Task Scheduler)
+│   ├── claude-switch.ps1     # Claude Code 端点切换器
+│   ├── proxy-loop.bat        # 自动重启循环
+│   └── start-proxy.vbs       # Windows 静默启动（配合任务计划）
 ├── docs/
-│   └── SKILL.md              # Tool description file
+│   ├── troubleshooting.md    # 踩坑指南（12+ 个坑）
+│   └── SKILL.md              # 工具描述文件
 ├── LICENSE
 └── README.md
 ```
 
-## How It Works
+## 工作原理
 
-### proxy.py — Claude Desktop Gateway
+### proxy.py — Claude Desktop 网关
 
 ```mermaid
 sequenceDiagram
     participant CD as Claude Desktop
     participant GW as proxy.py (:8082)
-    participant UP as Upstream Provider
+    participant UP as 上游提供商
 
-    CD->>GW: POST /v1/messages (Anthropic format)
-    GW->>GW: Identify provider by model name
+    CD->>GW: POST /v1/messages (Anthropic 格式)
+    GW->>GW: 根据模型名识别提供商
     
-    alt Anthropic-compatible provider (SophNet, MiMo)
-        GW->>UP: Forward as-is (Anthropic format)
-        UP->>GW: Anthropic response
-    else OpenAI provider (aiproxies)
-        GW->>GW: Convert Anthropic → OpenAI format
-        GW->>UP: POST /v1/chat/completions (OpenAI format)
-        UP->>GW: OpenAI response
-        GW->>GW: Convert OpenAI → Anthropic format
+    alt Anthropic 兼容提供商（SophNet、MiMo）
+        GW->>UP: 原样转发（Anthropic 格式）
+        UP->>GW: Anthropic 响应
+    else OpenAI 提供商（aiproxies）
+        GW->>GW: 转换 Anthropic → OpenAI 格式
+        GW->>UP: POST /v1/chat/completions (OpenAI 格式)
+        UP->>GW: OpenAI 响应
+        GW->>GW: 转换 OpenAI → Anthropic 格式
     end
     
-    GW->>CD: Anthropic response
+    GW->>CD: Anthropic 响应
 ```
 
-### codex-proxy.py — Protocol Translation
+### codex-proxy.py — 协议转换
 
 ```mermaid
 sequenceDiagram
@@ -251,39 +252,39 @@ sequenceDiagram
     participant PX as codex-proxy.py (:5678)
     participant AI as aiproxies.cc
 
-    CX->>PX: POST /v1/messages (Anthropic format)
-    PX->>PX: Translate messages, tools, system prompt
-    PX->>AI: POST /v1/chat/completions (OpenAI format)
-    AI-->>PX: SSE stream (OpenAI delta format)
-    PX-->>CX: SSE stream (Anthropic delta format)
+    CX->>PX: POST /v1/messages (Anthropic 格式)
+    PX->>PX: 翻译 messages、tools、system prompt
+    PX->>AI: POST /v1/chat/completions (OpenAI 格式)
+    AI-->>PX: SSE 流（OpenAI delta 格式）
+    PX-->>CX: SSE 流（Anthropic delta 格式）
     
-    Note over PX: Handles tool_use ↔ function_call<br/>bidirectional translation
+    Note over PX: 处理 tool_use ↔ function_call<br/>双向转换
 ```
 
-## Control Panel
+## 控制面板
 
-The gateway includes a built-in web control panel at `http://127.0.0.1:8083`:
+启动后打开 `http://127.0.0.1:8083`：
 
-- View the currently active model
-- Switch models instantly (takes effect on the next message)
-- Monitor request statistics and logs
+- 查看当前选中的模型
+- 一键切换模型（下一条消息立即生效）
+- 查看请求统计和日志
 
-## Adding New Providers
+## 添加新提供商
 
-Adding a new model provider takes 5 steps:
+添加新模型提供商只需 5 步：
 
-**Step 1.** Add your API key to `secrets.json`:
+**第 1 步** — 在 `secrets.json` 中添加 API Key：
 ```json
-{ "new_provider_key": "sk-your-key" }
+{ "new_provider_key": "sk-你的密钥" }
 ```
 
-**Step 2.** Add constants at the top of `proxy.py`:
+**第 2 步** — 在 `proxy.py` 顶部添加常量：
 ```python
 NEW_PROVIDER_BASE = "https://api.newprovider.com/v1"
 NEW_PROVIDER_KEY = _secrets.get("new_provider_key", "")
 ```
 
-**Step 3.** Add model definitions and merge into `MODELS`:
+**第 3 步** — 添加模型字典并合并到 `MODELS`：
 ```python
 NEW_MODELS = {
     "new-model-name": {"provider": "newprovider", "upstream": "actual-model-id"},
@@ -291,62 +292,77 @@ NEW_MODELS = {
 MODELS = {**SOPHNET_MODELS, **AIPROXIES_MODELS, **MIMO_MODELS, **NEW_MODELS}
 ```
 
-**Step 4.** Write a routing function. Copy the pattern that matches your provider's API:
-- Anthropic-compatible? Copy `_proxy_via_mimo`
-- OpenAI-compatible? Copy `_proxy_via_aiproxies`
+**第 4 步** — 写路由函数。复制与你的提供商 API 格式匹配的模板：
+- Anthropic 兼容？复制 `_proxy_via_mimo`
+- OpenAI 兼容？复制 `_proxy_via_aiproxies`
 
-**Step 5.** Add routing in `proxy_post()`:
+**第 5 步** — 在 `proxy_post()` 中添加路由判断：
 ```python
 elif info["provider"] == "newprovider":
     return _proxy_via_newprovider(data, info["upstream"])
 ```
 
-Restart the proxy and Claude Desktop. Done.
+重启代理和 Claude Desktop，完成。
 
-## Auto-Start on Windows
+## Windows 开机自启
 
-To start the proxy silently on boot:
+静默后台启动，开机自动运行：
 
-1. Press `Win + R`, type `shell:startup`
-2. Create a shortcut to `scripts/start-proxy.vbs`
-3. The proxy will start silently in the background with auto-restart
+1. `Win + R` 输入 `shell:startup`
+2. 创建 `scripts/start-proxy.vbs` 的快捷方式放进去
+3. 代理将在后台静默运行，带自动重启
 
----
+## 踩坑指南
 
-## 中文说明
+我们整理了 **12+ 个**配置过程中遇到的坑和修复方案：
 
-### 为什么做这个项目？
-
-用官方 API 跑 AI 编程工具，成本是真实的痛：
-
-- **贵**：Claude Sonnet 4 按量计费，连续编程一天 $11-19，一个月 $300-500
-- **买不了**：OpenAI / Anthropic 只收海外信用卡，国内用户根本没法直接付款
-- **连不上**：`api.openai.com` 和 `api.anthropic.com` 在国内被墙，没代理用不了
-- **协议不通**：Claude Desktop 发 Anthropic 格式，你的中转站可能只支持 OpenAI 格式
-
-**本项目一次性解决以上所有问题**——接入便宜的中转站/自建反代/国产模型，协议自动转换，一个代理搞定一切。
-
-### 这些工具是什么？
-
-| 工具 | 说明 | 安装 |
-|------|------|------|
-| **Claude Desktop** | Anthropic 桌面客户端，3P 模式可接入第三方模型 | [claude.ai/download](https://claude.ai/download) |
-| **Codex CLI** | OpenAI 开源命令行编程 Agent | `npm install -g @openai/codex` |
-| **Claude Code** | Anthropic 命令行编程助手，支持 Sub-agent 并行 | `npm install -g @anthropic-ai/claude-code` |
-
-### 配置要点
-
-- Claude Desktop 需启用开发者模式：**Help → Troubleshooting → Enable Developer Mode**
-- Gateway URL 必须用 `http://127.0.0.1:端口`，不能用 `localhost`
-- 开了 Clash 注意排除本地地址，避免代理拦截 127.0.0.1 的请求
-- MSIX 安装的 Claude Desktop 存在路径虚拟化问题，详见踩坑指南
-
-### 踩坑指南
-
-我们整理了 12+ 个配置过程中遇到的坑和修复方案，包括 MSIX 路径 bug、注册表配置、模型名显示异常、VM 沙箱启动失败等。
+- MSIX 路径虚拟化 bug（VM 沙箱、MCP 配置文件）
+- 注册表配置参考（Gateway、Cowork、MCP）
+- 模型名显示异常、模型列表不更新
+- Proxy 崩溃恢复、环境变量持久化
+- Clash 代理冲突、curl 不走系统代理
 
 详见 **[docs/troubleshooting.md](docs/troubleshooting.md)**
 
+---
+
+<details>
+<summary><h2>English</h2></summary>
+
+**Make Claude Desktop & Codex CLI work with any third-party model provider.**
+
+Claude Desktop's 3P mode and Codex CLI / Claude Code only connect to official APIs by default. This project provides a local proxy layer that enables multi-provider routing + automatic protocol translation.
+
+### Why?
+
+- **Cost**: Official API pricing ($300-500/month for heavy use) is prohibitive
+- **Payment**: OpenAI/Anthropic only accept US/EU credit cards
+- **Network**: API endpoints are blocked in some regions
+- **Protocol**: Claude Desktop speaks Anthropic format; your provider might only support OpenAI format
+
+### Features
+
+- Multi-provider gateway with browser control panel for instant model switching
+- Bidirectional Anthropic <-> OpenAI protocol translation (streaming + tool use)
+- Image input format conversion + DALL-E image generation routing
+- Global exception handler + auto-restart loop
+- Centralized key management via `secrets.json` (gitignored)
+
+### Quick Start
+
+```bash
+pip install -r requirements.txt
+cp secrets.example.json secrets.json  # fill in your API keys
+python proxy.py                       # Claude Desktop gateway (:8082 + :8083)
+python codex-proxy.py                 # Codex CLI proxy (:5678)
+```
+
+For full setup instructions, see the Chinese documentation above. All configuration steps are identical.
+
+For troubleshooting (MSIX bugs, registry config, etc.), see **[docs/troubleshooting.md](docs/troubleshooting.md)**
+
+</details>
+
 ## License
 
-[MIT](LICENSE) - feel free to use, modify, and distribute.
+[MIT](LICENSE)
