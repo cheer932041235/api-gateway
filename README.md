@@ -1,5 +1,9 @@
 # API Gateway
 
+<p align="center">
+  <img src="docs/api-gateway-banner.png" alt="API Gateway Architecture" width="800">
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776ab.svg)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000.svg)](https://flask.palletsprojects.com)
@@ -9,7 +13,55 @@
 
 Claude Desktop's 3p (third-party) mode and Codex CLI / Claude Code only connect to official APIs by default. This project provides a local proxy layer that enables **multi-provider routing + automatic protocol translation**, so you can freely use any third-party model in these tools.
 
-[English](#architecture) | [中文](#中文说明)
+[English](#why-this-project) | [中文](#中文说明)
+
+---
+
+## Why This Project?
+
+Using AI coding tools (Claude Desktop, Codex CLI, Claude Code) with official APIs faces several real-world barriers:
+
+**Cost** — Claude Sonnet 4 API costs $3/$15 per 1M tokens. A full day of coding (30-50 refactoring sessions) costs $11-19/day, or **$300-500/month**. That's more expensive than hiring a junior developer in many regions.
+
+**Payment** — OpenAI and Anthropic only accept US/EU credit cards. Users in many countries simply **cannot pay** for official API access, regardless of willingness.
+
+**Network** — `api.openai.com` and `api.anthropic.com` are blocked in some regions. Even with a valid API key, direct connections fail without a VPN.
+
+**Protocol Lock-in** — Claude Desktop speaks Anthropic's Messages API. If your model provider uses OpenAI's Chat Completions API, you're stuck — unless something translates between the two formats.
+
+**This project solves all four problems.** It lets you connect to affordable third-party providers (relay stations, self-hosted proxies, regional model providers) and handles all the protocol translation automatically. One proxy, any model, any provider.
+
+---
+
+## What Are These Tools?
+
+### Claude Desktop
+
+[Claude Desktop](https://claude.ai/download) is Anthropic's desktop client for Claude. In **3P (Third-Party) mode**, it can connect to any API endpoint instead of Anthropic's servers — this is what makes the gateway possible.
+
+**Setup notes:**
+- Download from [claude.ai/download](https://claude.ai/download) (Windows / macOS)
+- Enable Developer Mode: **Help → Troubleshooting → Enable Developer Mode**
+- Configure Gateway: **Developer → Configure Third-Party Inference**
+- Gateway URL must use `http://127.0.0.1:port` (not `localhost`)
+
+### Codex CLI
+
+[Codex CLI](https://github.com/openai/codex) is OpenAI's open-source CLI coding agent. It uses the OpenAI API by default, but with `codex-proxy.py`, you can run it through any provider.
+
+```bash
+npm install -g @openai/codex
+```
+
+### Claude Code
+
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) is Anthropic's CLI coding assistant. It's a terminal-based agent that can read, write, and execute code autonomously.
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+> For detailed troubleshooting (MSIX path bugs, registry quirks, Cowork VM issues, etc.), see **[docs/troubleshooting.md](docs/troubleshooting.md)**.
 
 ---
 
@@ -263,16 +315,37 @@ To start the proxy silently on boot:
 
 ## 中文说明
 
-本项目解决的核心问题：**Claude Desktop 和 Codex CLI 默认只能连接官方 API，无法使用第三方模型**。
+### 为什么做这个项目？
 
-通过本地代理层，你可以：
+用官方 API 跑 AI 编程工具，成本是真实的痛：
 
-- 在 Claude Desktop 中使用 DeepSeek、GPT-5.5、MiMo、Kimi、GLM 等任意模型
-- 在 Codex CLI / Claude Code 中通过协议转换使用 OpenAI 兼容的模型
-- 一键切换模型，无需重启应用
-- 所有 API Key 集中管理，代码零硬编码
+- **贵**：Claude Sonnet 4 按量计费，连续编程一天 $11-19，一个月 $300-500
+- **买不了**：OpenAI / Anthropic 只收海外信用卡，国内用户根本没法直接付款
+- **连不上**：`api.openai.com` 和 `api.anthropic.com` 在国内被墙，没代理用不了
+- **协议不通**：Claude Desktop 发 Anthropic 格式，你的中转站可能只支持 OpenAI 格式
 
-详细使用说明见上方英文文档，操作步骤完全一致。
+**本项目一次性解决以上所有问题**——接入便宜的中转站/自建反代/国产模型，协议自动转换，一个代理搞定一切。
+
+### 这些工具是什么？
+
+| 工具 | 说明 | 安装 |
+|------|------|------|
+| **Claude Desktop** | Anthropic 桌面客户端，3P 模式可接入第三方模型 | [claude.ai/download](https://claude.ai/download) |
+| **Codex CLI** | OpenAI 开源命令行编程 Agent | `npm install -g @openai/codex` |
+| **Claude Code** | Anthropic 命令行编程助手，支持 Sub-agent 并行 | `npm install -g @anthropic-ai/claude-code` |
+
+### 配置要点
+
+- Claude Desktop 需启用开发者模式：**Help → Troubleshooting → Enable Developer Mode**
+- Gateway URL 必须用 `http://127.0.0.1:端口`，不能用 `localhost`
+- 开了 Clash 注意排除本地地址，避免代理拦截 127.0.0.1 的请求
+- MSIX 安装的 Claude Desktop 存在路径虚拟化问题，详见踩坑指南
+
+### 踩坑指南
+
+我们整理了 12+ 个配置过程中遇到的坑和修复方案，包括 MSIX 路径 bug、注册表配置、模型名显示异常、VM 沙箱启动失败等。
+
+详见 **[docs/troubleshooting.md](docs/troubleshooting.md)**
 
 ## License
 
