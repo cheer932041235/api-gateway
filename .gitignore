@@ -1,0 +1,16 @@
+# API 密钥（绝对不能上传）
+secrets.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+.windsurf/
+
+# OS
+.DS_Store
+Thumbs.db
