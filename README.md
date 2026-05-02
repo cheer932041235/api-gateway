@@ -4,8 +4,11 @@
   <img src="docs/api-gateway-banner.png" alt="API Gateway 架构图" width="800">
 </p>
 
+[![CI](https://github.com/cheershuyang/api-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/cheershuyang/api-gateway/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776ab.svg)](https://python.org)
+[![Tests](https://img.shields.io/badge/tests-20%20passed-brightgreen.svg)](#测试)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)](Dockerfile)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000.svg)](https://flask.palletsprojects.com)
 [![aiohttp](https://img.shields.io/badge/aiohttp-3.9-2c5bb4.svg)](https://docs.aiohttp.org)
 
@@ -199,6 +202,39 @@ codex  # 或 claude
 . .\scripts\claude-switch.ps1 list     # 列出所有端点
 ```
 
+## 设计亮点
+
+本项目的核心技术挑战在于 **Anthropic ↔ OpenAI 协议的实时双向翻译**，尤其是流式 SSE 事件流的状态机翻译。
+
+### 流式 SSE 翻译状态机
+
+OpenAI 的流式输出是扁平的 delta 序列，Anthropic 的流式输出是**结构化的事件流**（有 block 生命周期）。翻译器必须在流中实时判断"什么时候开始新 block、什么时候关闭旧 block"——不能等收完再处理：
+
+```
+OpenAI delta 流（扁平）           →    Anthropic 事件流（结构化）
+─────────────────────                 ────────────────────────
+                                      message_start
+                                      content_block_start (text)
+delta.content = "你"              →    content_block_delta (text_delta)
+delta.content = "好"              →    content_block_delta (text_delta)
+delta.tool_calls[0].id            →    content_block_stop ← 关闭文本块
+                                      content_block_start (tool_use)
+delta.tool_calls[0].args          →    content_block_delta (input_json_delta)
+finish_reason = "tool_calls"      →    content_block_stop
+                                      message_delta (stop_reason="tool_use")
+[DONE]                            →    message_stop
+```
+
+### 工具调用双向映射
+
+完整支持 AI Agent 的工具调用链路：`tool_use` ↔ `function_call` 双向转换，包括工具定义（`input_schema` ↔ `parameters`）、调用请求、结果返回三个环节。
+
+### 双进程架构
+
+两个代理进程独立运行、互不依赖。`proxy.py` 用 Flask（同步）因为 Claude Desktop 不并发；`codex-proxy.py` 用 aiohttp（异步）因为流式 SSE 翻译需要非阻塞 I/O。
+
+> 完整的设计分析见 **[docs/architecture.md](docs/architecture.md)**
+
 ## 项目结构
 
 ```
@@ -207,13 +243,21 @@ api-gateway/
 ├── codex-proxy.py            # Codex CLI / Claude Code 协议转换代理
 ├── requirements.txt          # Python 依赖
 ├── secrets.example.json      # 密钥模板（可安全提交）
+├── Dockerfile                # 容器化部署
+├── docker-compose.yml        # 多服务编排
+├── tests/
+│   └── test_translate.py     # 协议转换单元测试（20 cases）
 ├── scripts/
 │   ├── claude-switch.ps1     # Claude Code 端点切换器
 │   ├── proxy-loop.bat        # 自动重启循环
-│   └── start-proxy.vbs       # Windows 静默启动（配合任务计划）
+│   └── start-proxy.vbs       # Windows 静默启动
 ├── docs/
+│   ├── architecture.md       # 架构设计文档（协议差异分析 + 状态机）
 │   ├── troubleshooting.md    # 踩坑指南（12+ 个坑）
-│   └── SKILL.md              # 工具描述文件
+│   └── api-gateway-banner.png
+├── .github/workflows/ci.yml  # GitHub Actions（lint + test）
+├── CONTRIBUTING.md           # 贡献指南
+├── CHANGELOG.md              # 版本变更记录
 ├── LICENSE
 └── README.md
 ```
@@ -311,6 +355,32 @@ elif info["provider"] == "newprovider":
 1. `Win + R` 输入 `shell:startup`
 2. 创建 `scripts/start-proxy.vbs` 的快捷方式放进去
 3. 代理将在后台静默运行，带自动重启
+
+## 测试
+
+```bash
+# 运行全部测试
+python -m pytest tests/ -v
+
+# Lint 检查
+ruff check . --select E,F,W --ignore E501
+```
+
+测试覆盖：
+- **请求翻译**（8 cases）：system prompt、消息格式、工具定义、tool_use/tool_result、流式选项
+- **响应翻译**（5 cases）：文本、工具调用、混合内容、停止原因映射、畸形参数容错
+- **辅助函数**（7 cases）：消息构建、图片格式转换、生图请求检测
+
+## Docker 部署
+
+```bash
+# 使用 docker-compose 启动所有服务
+docker-compose up -d
+
+# 或单独构建运行
+docker build -t api-gateway .
+docker run -d -p 8082:8082 -p 8083:8083 -v ./secrets.json:/app/secrets.json:ro api-gateway
+```
 
 ## 踩坑指南
 

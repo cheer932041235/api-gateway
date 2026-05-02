@@ -1,46 +1,72 @@
 """
 Anthropic -> OpenAI Protocol Proxy
-Accepts Anthropic Messages API requests from Claude Code / Codex CLI,
-translates to OpenAI Chat Completions API, forwards to upstream, translates back.
+
+接收 Claude Code / Codex CLI 发出的 Anthropic Messages API 请求，
+实时翻译为 OpenAI Chat Completions API 格式转发到上游，再将响应翻译回来。
+
+核心能力：
+  - 请求翻译：system prompt、messages、tools、tool_result 全量转换
+  - 流式 SSE 翻译：OpenAI delta 事件流 → Anthropic 结构化事件流
+  - 工具调用双向映射：tool_use ↔ function_call
 
 Usage:
     python codex-proxy.py
     python codex-proxy.py --port 5678 --upstream https://www.aiproxies.cc --model gpt-5.4
-
-Dependencies:
-    pip install aiohttp
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+import logging
 import os
-import uuid
-import time
 import sys
+import time
+import uuid
+from typing import Any
+
 from aiohttp import web, ClientSession, ClientTimeout
 
-# ============ Secrets ============
+# ── Logging ─────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("codex-proxy")
+
+# ── Secrets ─────────────────────────────────────────────
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-def _load_secrets():
+
+def _load_secrets() -> dict[str, str]:
+    """从 secrets.json 加载 API 密钥。文件不存在时返回空字典。"""
     path = os.path.join(_SCRIPT_DIR, "secrets.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    print("[WARN] secrets.json not found, API keys will be empty")
+    log.warning("secrets.json not found, API keys will be empty")
     return {}
+
 _secrets = _load_secrets()
 
-# ============ Default Config ============
+# ── Default Config ──────────────────────────────────────
 UPSTREAM_BASE = "https://www.aiproxies.cc"
 UPSTREAM_KEY = _secrets.get("aiproxies_key", "")
 DEFAULT_MODEL = "gpt-5.4"
 PORT = 5678
 
 
-# ============ Request Translation: Anthropic -> OpenAI ============
+# ══════════════════════════════════════════════════════════
+#  Request Translation: Anthropic -> OpenAI
+# ══════════════════════════════════════════════════════════
 
-def translate_request(body: dict) -> dict:
+def translate_request(body: dict[str, Any]) -> dict[str, Any]:
+    """将 Anthropic Messages API 请求体转换为 OpenAI Chat Completions 格式。
+
+    处理：system prompt 提升、消息格式转换、tool_use/tool_result 双向映射、
+    工具定义 input_schema → parameters 转换。
+    """
     messages = []
 
     # System message (Anthropic: top-level "system" field)
@@ -141,9 +167,15 @@ def translate_request(body: dict) -> dict:
     return result
 
 
-# ============ Non-streaming Response Translation: OpenAI -> Anthropic ============
+# ══════════════════════════════════════════════════════════
+#  Non-streaming Response: OpenAI -> Anthropic
+# ══════════════════════════════════════════════════════════
 
-def translate_response(openai_resp: dict) -> dict:
+def translate_response(openai_resp: dict[str, Any]) -> dict[str, Any]:
+    """将 OpenAI Chat Completions 响应转换为 Anthropic Messages 格式。
+
+    处理：finish_reason 映射、function_call → tool_use 转换、usage 字段重命名。
+    """
     choice = openai_resp.get("choices", [{}])[0]
     message = choice.get("message", {})
 
@@ -186,13 +218,21 @@ def translate_response(openai_resp: dict) -> dict:
     }
 
 
-# ============ Streaming Translation: OpenAI SSE -> Anthropic SSE ============
+# ══════════════════════════════════════════════════════════
+#  Streaming Translation: OpenAI SSE -> Anthropic SSE
+# ══════════════════════════════════════════════════════════
 
-def sse(event: str, data: dict) -> bytes:
+def sse(event: str, data: dict[str, Any]) -> bytes:
+    """构造一条 SSE 事件。"""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n".encode("utf-8")
 
 
-async def translate_stream(resp, response: web.StreamResponse):
+async def translate_stream(resp: Any, response: web.StreamResponse) -> None:
+    """将 OpenAI 的扁平 delta SSE 流翻译为 Anthropic 的结构化事件流。
+
+    维护状态机：跟踪 block_index、tool_buffers、text_block_closed，
+    在流中实时判断何时开始/关闭内容块。
+    """
     msg_id = f"msg_{uuid.uuid4().hex[:24]}"
 
     # message_start
@@ -331,9 +371,11 @@ async def translate_stream(resp, response: web.StreamResponse):
     await response.write(sse("message_stop", {"type": "message_stop"}))
 
 
-# ============ HTTP Handlers ============
+# ══════════════════════════════════════════════════════════
+#  HTTP Handlers
+# ══════════════════════════════════════════════════════════
 
-async def handle_messages(request: web.Request):
+async def handle_messages(request: web.Request) -> web.StreamResponse:
     body = await request.json()
     is_stream = body.get("stream", False)
     openai_body = translate_request(body)
@@ -372,7 +414,7 @@ async def handle_messages(request: web.Request):
             ) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
-                    print(f"[ERROR] Upstream {resp.status}: {error_text[:200]}")
+                    log.error("Upstream %d: %s", resp.status, error_text[:200])
                     return web.json_response(
                         {"error": {"type": "api_error", "message": error_text}},
                         status=resp.status,
@@ -381,7 +423,7 @@ async def handle_messages(request: web.Request):
                 return web.json_response(translate_response(openai_resp))
 
     except Exception as e:
-        print(f"[ERROR] {e}")
+        log.error("Upstream error: %s", e)
         return web.json_response(
             {"error": {"type": "api_error", "message": str(e)}},
             status=500,
@@ -392,7 +434,7 @@ async def handle_health(request: web.Request):
     return web.json_response({"status": "ok"})
 
 
-# ============ App Lifecycle ============
+# ── App Lifecycle ───────────────────────────────────────
 
 async def on_startup(app):
     app["session"] = ClientSession(timeout=ClientTimeout(total=300))
@@ -403,6 +445,8 @@ async def on_cleanup(app):
 
 
 def main():
+    global UPSTREAM_BASE, UPSTREAM_KEY, DEFAULT_MODEL
+
     parser = argparse.ArgumentParser(description="Anthropic -> OpenAI Protocol Proxy")
     parser.add_argument("--port", type=int, default=PORT, help="Local port (default: 5678)")
     parser.add_argument("--upstream", default=UPSTREAM_BASE, help="Upstream OpenAI-compatible base URL")
@@ -410,7 +454,6 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model to use (default: gpt-5.4)")
     args = parser.parse_args()
 
-    global UPSTREAM_BASE, UPSTREAM_KEY, DEFAULT_MODEL
     UPSTREAM_BASE = args.upstream.rstrip("/")
     UPSTREAM_KEY = args.key
     DEFAULT_MODEL = args.model
@@ -421,12 +464,10 @@ def main():
     app.router.add_post("/v1/messages", handle_messages)
     app.router.add_get("/", handle_health)
 
-    print(f"\n{'='*50}")
-    print(f"  Anthropic -> OpenAI Protocol Proxy")
-    print(f"  Listen:   http://127.0.0.1:{args.port}")
-    print(f"  Upstream: {UPSTREAM_BASE}")
-    print(f"  Model:    {DEFAULT_MODEL}")
-    print(f"{'='*50}\n")
+    log.info("=== Anthropic -> OpenAI Protocol Proxy ===")
+    log.info("Listen:   http://127.0.0.1:%d", args.port)
+    log.info("Upstream: %s", UPSTREAM_BASE)
+    log.info("Model:    %s", DEFAULT_MODEL)
 
     web.run_app(app, host="127.0.0.1", port=args.port, print=None)
 

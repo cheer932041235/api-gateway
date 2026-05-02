@@ -1,0 +1,21 @@
+services:
+  gateway:
+    build: .
+    container_name: api-gateway
+    ports:
+      - "8082:8082"
+      - "8083:8083"
+    volumes:
+      - ./secrets.json:/app/secrets.json:ro
+    restart: unless-stopped
+    command: python proxy.py
+
+  codex-proxy:
+    build: .
+    container_name: codex-proxy
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./secrets.json:/app/secrets.json:ro
+    restart: unless-stopped
+    command: python codex-proxy.py

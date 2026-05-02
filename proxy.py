@@ -1,32 +1,55 @@
 """
-Claude Desktop <-> Multi-Provider Gateway Proxy (Flask)
-Rewrites model names and provides a web panel for model switching.
+Claude Desktop <-> Multi-Provider Gateway Proxy
+
+本地代理层，让 Claude Desktop 通过 3P 模式接入多个第三方模型提供商。
+
+核心功能：
+  - 多提供商路由（按模型名自动分发）
+  - Anthropic ↔ OpenAI 协议双向转换
+  - 浏览器控制面板实时切换模型
+  - 图片输入格式转换 + AI 生图路由
 
 Usage:
   python proxy.py
-  Gateway URL for Claude Desktop: http://127.0.0.1:8082
+  Gateway:       http://127.0.0.1:8082
   Control Panel: http://127.0.0.1:8083
 """
 
+from __future__ import annotations
+
 import json
+import logging
 import os
-import time
-import sys
 import re
 import socket
+import sys
 import threading
+import time
+from typing import Any, Dict, List
+
 import requests as req_lib
 from flask import Flask, request, Response
 
+# ── Logging ─────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("proxy")
+
 # ── Secrets ─────────────────────────────────────────────
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-def _load_secrets():
+
+def _load_secrets() -> Dict[str, str]:
+    """从 secrets.json 加载 API 密钥。文件不存在时返回空字典。"""
     path = os.path.join(_SCRIPT_DIR, "secrets.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    print("[WARN] secrets.json not found, API keys will be empty", flush=True)
+    log.warning("secrets.json not found, API keys will be empty")
     return {}
+
 _secrets = _load_secrets()
 
 # ── Config ──────────────────────────────────────────────
@@ -88,7 +111,7 @@ proxy_app = Flask("proxy")
 @proxy_app.errorhandler(Exception)
 def handle_exception(e):
     """全局异常捕获，防止进程崩溃"""
-    print(f"[ERROR] Unhandled exception: {e}", flush=True)
+    log.error("Unhandled exception: %s", e)
     return Response(
         json.dumps({"type": "error", "error": {"type": "internal_error", "message": str(e)}}, ensure_ascii=False).encode("utf-8"),
         status=500, content_type="application/json; charset=utf-8"
@@ -108,7 +131,7 @@ def proxy_post(path):
     state["request_count"] += 1
     state["last_request"] = time.strftime("%H:%M:%S")
     suffix = "" if original_model == target_model else f" (mapped from {original_model})"
-    print(f"[PROXY] #{state['request_count']} /{path} | {target_model}{suffix}", flush=True)
+    log.info("#%d /%s | %s%s", state['request_count'], path, target_model, suffix)
 
     # ── 路由分发：SophNet (Anthropic) vs aiproxies (OpenAI) vs MiMo (Anthropic) ──
     if target_model in AIPROXIES_MODELS:
@@ -140,12 +163,12 @@ def _proxy_via_sophnet(data, path):
             target_url, json=data, headers=fwd_headers,
             timeout=120, proxies={"http": None, "https": None}
         )
-        print(f"[PROXY] SophNet -> {resp.status_code} ({len(resp.content)} bytes)", flush=True)
+        log.info("SophNet -> %d (%d bytes)", resp.status_code, len(resp.content))
         excluded = {"transfer-encoding", "connection", "content-encoding", "content-length"}
         headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
         return Response(resp.content, status=resp.status_code, headers=headers)
     except Exception as e:
-        print(f"[ERROR] SophNet: {e}", flush=True)
+        log.error("SophNet: %s", e)
         return Response(
             json.dumps({"type": "error", "error": {"type": "proxy_error", "message": str(e)}}),
             status=502, content_type="application/json"
@@ -170,12 +193,12 @@ def _proxy_via_mimo(data, path):
             target_url, json=data, headers=fwd_headers,
             timeout=120, proxies={"http": None, "https": None}
         )
-        print(f"[PROXY] MiMo -> {resp.status_code} ({len(resp.content)} bytes)", flush=True)
+        log.info("MiMo -> %d (%d bytes)", resp.status_code, len(resp.content))
         excluded = {"transfer-encoding", "connection", "content-encoding", "content-length"}
         headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
         return Response(resp.content, status=resp.status_code, headers=headers)
     except Exception as e:
-        print(f"[ERROR] MiMo: {e}", flush=True)
+        log.error("MiMo: %s", e)
         return Response(
             json.dumps({"type": "error", "error": {"type": "proxy_error", "message": str(e)}}),
             status=502, content_type="application/json"
@@ -230,7 +253,7 @@ def _proxy_via_aiproxies(anthropic_data, target_model):
     """混合路由：文本 → Chat Completions，生图 → Responses API"""
     user_text = _extract_user_text(anthropic_data)
     if _IMAGE_PATTERN.search(user_text):
-        print(f"[PROXY] Image request detected, using Responses API", flush=True)
+        log.info("Image request detected, using Responses API")
         return _aiproxies_image(anthropic_data, target_model)
     else:
         return _aiproxies_text(anthropic_data, target_model)
@@ -254,9 +277,9 @@ def _aiproxies_text(anthropic_data, target_model):
             headers={"Authorization": f"Bearer {AIPROXIES_KEY}", "Content-Type": "application/json"},
             timeout=120, proxies={"http": None, "https": None},
         )
-        print(f"[PROXY] aiproxies-chat({target_model}) -> {resp.status_code} ({len(resp.content)} bytes)", flush=True)
+        log.info("aiproxies-chat(%s) -> %d (%d bytes)", target_model, resp.status_code, len(resp.content))
     except Exception as e:
-        print(f"[ERROR] aiproxies-chat: {e}", flush=True)
+        log.error("aiproxies-chat: %s", e)
         return Response(json.dumps({"type": "error", "error": {"type": "proxy_error", "message": str(e)}}),
                         status=502, content_type="application/json")
 
@@ -302,9 +325,9 @@ def _aiproxies_image(anthropic_data, target_model):
             headers={"Authorization": f"Bearer {AIPROXIES_KEY}", "Content-Type": "application/json"},
             timeout=180, proxies={"http": None, "https": None},
         )
-        print(f"[PROXY] aiproxies-img({target_model}) -> {resp.status_code} ({len(resp.content)} bytes)", flush=True)
+        log.info("aiproxies-img(%s) -> %d (%d bytes)", target_model, resp.status_code, len(resp.content))
     except Exception as e:
-        print(f"[ERROR] aiproxies-img: {e}", flush=True)
+        log.error("aiproxies-img: %s", e)
         return Response(json.dumps({"type": "error", "error": {"type": "proxy_error", "message": str(e)}}),
                         status=502, content_type="application/json")
 
@@ -332,7 +355,7 @@ def _aiproxies_image(anthropic_data, target_model):
                     "type": "image",
                     "source": {"type": "base64", "media_type": media, "data": b64_data}
                 })
-                print(f"[PROXY] Image generated: {len(b64_data)} chars base64", flush=True)
+                log.info("Image generated: %d chars base64", len(b64_data))
 
     if not anthropic_content:
         anthropic_content = [{"type": "text", "text": "(empty response)"}]
@@ -492,7 +515,7 @@ def panel_switch():
     if model in MODELS:
         old = state["current_model"]
         state["current_model"] = model
-        print(f"[SWITCH] {old} -> {model}", flush=True)
+        log.info("Model switch: %s -> %s", old, model)
         return Response(json.dumps({"ok": True, "model": model}), content_type="application/json")
     return Response(json.dumps({"ok": False, "error": "unknown model"}), status=400, content_type="application/json")
 
@@ -505,21 +528,19 @@ def _port_in_use(port):
 
 if __name__ == "__main__":
     if _port_in_use(PROXY_PORT):
-        print(f"[WAIT] Port {PROXY_PORT} in use. Waiting for it to free up...", flush=True)
+        log.info("Port %d in use. Waiting for it to free up...", PROXY_PORT)
         for _ in range(30):  # 最多等 30 秒
             time.sleep(1)
             if not _port_in_use(PROXY_PORT):
                 break
         else:
-            print(f"[SKIP] Port {PROXY_PORT} still in use after 30s — another instance running.", flush=True)
+            log.warning("Port %d still in use after 30s — another instance running.", PROXY_PORT)
             sys.exit(0)
-    print(f"=== Claude-SophNet Gateway Proxy ===", flush=True)
-    print(f"Proxy:   http://127.0.0.1:{PROXY_PORT}  (Claude Desktop Gateway URL)", flush=True)
-    print(f"Panel:   http://127.0.0.1:{PANEL_PORT}  (open in browser to switch models)", flush=True)
-    print(f"Target:  {SOPHNET_BASE}", flush=True)
-    print(f"Model:   {state['current_model']}", flush=True)
-    print(f"Models:  {', '.join(MODELS.keys())}", flush=True)
-    print(flush=True)
+    log.info("=== API Gateway Proxy ===")
+    log.info("Proxy:   http://127.0.0.1:%d", PROXY_PORT)
+    log.info("Panel:   http://127.0.0.1:%d", PANEL_PORT)
+    log.info("Model:   %s", state['current_model'])
+    log.info("Models:  %s", ', '.join(MODELS.keys()))
 
     # Panel on background thread
     panel_thread = threading.Thread(
@@ -533,8 +554,8 @@ if __name__ == "__main__":
         try:
             proxy_app.run(host="127.0.0.1", port=PROXY_PORT, debug=False)
         except Exception as e:
-            print(f"[CRASH] Proxy crashed: {e}. Restarting in 3s...", flush=True)
+            log.error("Proxy crashed: %s. Restarting in 3s...", e)
             time.sleep(3)
         except KeyboardInterrupt:
-            print("[EXIT] Shutting down.", flush=True)
+            log.info("Shutting down.")
             break
