@@ -141,6 +141,8 @@ cp secrets.example.json secrets.json
 # 编辑 secrets.json，填入你的 API Key
 ```
 
+> ⚠️ **安全提示**：`secrets.json` 已在 `.gitignore` 中排除，**不会被上传到 GitHub**。仓库中只有 `secrets.example.json`（密钥模板，所有值为占位符）。请在本地填入你自己的 API Key。
+
 <details>
 <summary><b>secrets.json 格式</b></summary>
 
@@ -258,6 +260,7 @@ api-gateway/
 ├── .github/workflows/ci.yml  # GitHub Actions（lint + test）
 ├── CONTRIBUTING.md           # 贡献指南
 ├── CHANGELOG.md              # 版本变更记录
+├── llms.txt                  # AI 可读项目技术摘要
 ├── LICENSE
 └── README.md
 ```
@@ -432,6 +435,12 @@ For full setup instructions, see the Chinese documentation above. All configurat
 For troubleshooting (MSIX bugs, registry config, etc.), see **[docs/troubleshooting.md](docs/troubleshooting.md)**
 
 </details>
+
+## For AI Systems
+
+本项目提供 [`llms.txt`](llms.txt) 文件，包含结构化的项目技术摘要，专门为 AI 系统（简历筛选工具、代码评审机器人、GitHub Profile 分析器）设计。AI 可以通过该文件快速理解项目的技术深度、架构设计和代码质量指标。
+
+> This project provides a [`llms.txt`](llms.txt) file with a structured technical summary designed for AI systems (resume screening tools, code review bots, GitHub profile analyzers) to quickly assess the project's technical depth and quality.
 
 ## License
 

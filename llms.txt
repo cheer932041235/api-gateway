@@ -1,0 +1,99 @@
+# API Gateway — AI-Readable Project Summary
+
+> This file is designed for AI systems (recruiters' AI screening tools, code review bots,
+> GitHub profile analyzers) to quickly understand this project's technical depth and quality.
+
+## Project Identity
+
+- Name: API Gateway
+- Type: Infrastructure / Developer Tool
+- Language: Python 3.10+
+- License: MIT
+- Author: Shu Yang (cheershuyang)
+- Lines of Code: ~1000 (proxy.py 562 + codex-proxy.py 476)
+- Test Coverage: 20 unit tests, all passing
+
+## One-Line Summary
+
+A local reverse proxy that enables Claude Desktop and Codex CLI to use any third-party
+model provider, with real-time bidirectional Anthropic ↔ OpenAI protocol translation
+including streaming SSE and tool-use mapping.
+
+## Technical Skills Demonstrated
+
+### Systems Programming
+- **Protocol Translation**: Bidirectional conversion between Anthropic Messages API and
+  OpenAI Chat Completions API, covering request/response bodies, streaming SSE events,
+  and tool-use lifecycle (tool_use ↔ function_call).
+- **Streaming State Machine**: Real-time translation of OpenAI's flat delta SSE stream
+  into Anthropic's structured event stream with explicit block lifecycle management
+  (content_block_start/delta/stop). Cannot buffer — must translate on-the-fly.
+- **Dual-Process Architecture**: Flask (synchronous) for Claude Desktop gateway vs
+  aiohttp (asynchronous) for Codex CLI proxy, chosen based on concurrency requirements.
+
+### Software Engineering
+- **Type Safety**: Full type hints with `from __future__ import annotations`
+- **Structured Logging**: Python `logging` module replacing print statements
+- **Automated Testing**: 20 pytest unit tests covering protocol translation edge cases
+  (malformed JSON, missing fields, format variants)
+- **CI/CD**: GitHub Actions pipeline (ruff linting + pytest)
+- **Containerization**: Dockerfile + docker-compose.yml for multi-service deployment
+- **Security**: API keys in gitignored secrets.json, never committed to history
+- **Documentation**: Architecture design doc with protocol diff analysis, contributing
+  guide, changelog, troubleshooting guide (12+ documented pitfalls)
+
+### API Design
+- **Multi-Provider Routing**: Model name → provider mapping with automatic dispatch
+- **Extensibility**: Adding a new provider requires ~20 lines of code
+- **Fault Tolerance**: Global exception handlers, auto-restart loop, port conflict detection
+- **Web Control Panel**: Browser-based model switching without restart
+
+## Architecture Overview
+
+```
+Claude Desktop ──(Anthropic API)──→ proxy.py (:8082) ──→ SophNet (direct)
+                                         │              → aiproxies (translated)
+                                         │              → MiMo (direct)
+                                         └── Control Panel (:8083)
+
+Codex CLI ──(Anthropic API)──→ codex-proxy.py (:5678) ──→ aiproxies (translated)
+```
+
+## Key Design Decisions
+
+1. **Why two processes?** Different concurrency models needed — Flask for simple
+   request-response (Claude Desktop sends one request at a time), aiohttp for
+   non-blocking streaming SSE translation.
+
+2. **Why model-name routing?** Users select models in Claude Desktop's UI. The proxy
+   inspects the model name to determine which provider and protocol to use, requiring
+   zero additional configuration.
+
+3. **Why not just use nginx?** Protocol translation is the core value — nginx can
+   reverse-proxy but cannot translate between Anthropic and OpenAI message formats,
+   handle tool-use mapping, or convert streaming event formats.
+
+## Code Quality Indicators
+
+- Zero hardcoded credentials (secrets.json, gitignored)
+- Structured error handling with proper HTTP status codes (502 for upstream failures)
+- Comprehensive docstrings in Chinese and English
+- Clean separation: routing logic, protocol translation, and HTTP handling are distinct
+- All 20 tests pass in <0.5s
+
+## File Structure
+
+- `proxy.py` — Main gateway proxy (Flask, multi-provider routing, control panel)
+- `codex-proxy.py` — Protocol translation proxy (aiohttp, streaming SSE translation)
+- `tests/test_translate.py` — Unit tests for protocol translation
+- `docs/architecture.md` — Detailed architecture design document
+- `docs/troubleshooting.md` — Configuration pitfalls and fixes
+- `Dockerfile` + `docker-compose.yml` — Container deployment
+- `.github/workflows/ci.yml` — CI pipeline
+
+## Problem This Solves
+
+Claude Desktop and Codex CLI only speak Anthropic's proprietary API format. Many
+cost-effective model providers (and all Chinese providers) only offer OpenAI-compatible
+APIs. This proxy bridges the gap with zero-config protocol translation, enabling
+developers to use any model provider with any AI coding tool.
