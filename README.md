@@ -374,13 +374,39 @@ ruff check . --select E,F,W --ignore E501
 - **响应翻译**（5 cases）：文本、工具调用、混合内容、停止原因映射、畸形参数容错
 - **辅助函数**（7 cases）：消息构建、图片格式转换、生图请求检测
 
-## Docker 部署
+## 平台兼容性
+
+### 核心代理（跨平台）
+
+`proxy.py` 和 `codex-proxy.py` 是纯 Python，**Windows、macOS、Linux 均可运行**。只要你有 Python 3.10+ 和 `pip install -r requirements.txt`，代理本身就能跑。
+
+### 辅助脚本（仅 Windows）
+
+以下文件是 Windows 专属的，macOS/Linux 用户不需要：
+
+| 文件 | 用途 | macOS/Linux 替代方案 |
+|------|------|---------------------|
+| `start-proxy.vbs` | 静默后台启动 | `nohup python proxy.py &` |
+| `proxy-loop.bat` | 崩溃自动重启 | `while true; do python proxy.py; sleep 3; done` |
+| `claude-switch.ps1` | Codex CLI 端点切换 | 直接 `export ANTHROPIC_BASE_URL=...` |
+
+### Claude Desktop 3P 配置
+
+- **Windows**：通过注册表 `HKCU:\SOFTWARE\Policies\Claude` 注册模型列表，3P 配置文件在 `%LOCALAPPDATA%\Claude-3p\`
+- **macOS**：Claude Desktop 也支持 3P 模式，但配置路径和方式不同（参考 [Anthropic 官方文档](https://docs.anthropic.com)）
+- 本项目的踩坑指南主要基于 **Windows** 环境的实际经验，macOS 用户可能遇到不同的问题
+
+### Docker 部署（可选）
+
+本项目是本地工具，**大多数情况下直接 `python proxy.py` 就够了**，不需要 Docker。提供 Docker 支持是为了：
+
+- 想在 Linux 服务器上集中部署给团队使用
+- 不想在本机安装 Python 依赖
+- 习惯用容器管理后台服务
 
 ```bash
-# 使用 docker-compose 启动所有服务
 docker-compose up -d
-
-# 或单独构建运行
+# 或单独运行
 docker build -t api-gateway .
 docker run -d -p 8082:8082 -p 8083:8083 -v ./secrets.json:/app/secrets.json:ro api-gateway
 ```
