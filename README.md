@@ -397,6 +397,41 @@ docker run -d -p 8082:8082 -p 8083:8083 -v ./secrets.json:/app/secrets.json:ro a
 
 详见 **[docs/troubleshooting.md](docs/troubleshooting.md)**
 
+## 常见问题
+
+### 为什么 README 顶部的架构图显示不出来？
+
+GitHub 等平台**支持**渲染 PNG 图片，正常情况下可以看到。但某些第三方 Markdown 渲染器（如部分代码托管平台、本地编辑器预览、微信内打开等）不支持加载远程图片，这是平台限制，不是项目问题。
+
+如果看不到图片，可以直接查看 `docs/api-gateway-banner.png` 文件，或参考下方的 Mermaid 架构图（Mermaid 是纯文本渲染，不依赖图片加载）。
+
+### 为什么我问模型"你是谁"，它说自己是 GPT / DeepSeek / Kimi，而不是 Claude？
+
+**这恰恰说明代理在正常工作。**
+
+Claude Desktop 的界面上显示的是你在注册表中注册的模型名（如 `DeepSeek-V4-Flash`），但 Claude Desktop **不知道**后面实际响应的是哪个模型——它只是把请求发给了本地代理，代理再转发给真正的提供商。
+
+所以当你问"你是什么模型"时：
+
+| 你选的模型名 | 实际回答的是 | 它会说自己是 |
+|------------|------------|------------|
+| `DeepSeek-V4-Flash` | SophNet 上的 DeepSeek | "我是 DeepSeek" |
+| `gpt-5.5` | aiproxies 上的 GPT-5.5 | "我是 GPT-5.5" |
+| `MiMo-V2.5-Pro` | 小米 MiMo | "我是 MiMo" |
+| `Kimi-K2.6` | SophNet 上的 Kimi | "我是 Kimi" |
+
+这是**正常现象**，不是 bug。你用的就是第三方模型，不是 Claude 官方模型。Claude Desktop 在这里只是一个客户端壳子。
+
+### 为什么用 Claude Desktop 的界面，但跑的不是 Claude 模型？
+
+Claude Desktop 的 **3P（Third-Party）模式**允许它连接任意 API 端点，不限于 Anthropic 官方服务器。这是 Anthropic 官方提供的功能，不是 hack。
+
+本项目利用这个机制，让 Claude Desktop 变成一个**通用的 AI 编程客户端**——你可以用它的优秀 UI 和交互体验，同时接入任何你想用的模型。
+
+### secrets.json 会被上传吗？
+
+**绝对不会。** `secrets.json` 在 `.gitignore` 中被排除，且从未出现在本仓库的任何 Git 历史记录中（已通过 `git log` 和 `git ls-files` 验证）。仓库中只有 `secrets.example.json`（密钥模板，所有值为占位符）。
+
 ---
 
 <details>
