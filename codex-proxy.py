@@ -413,7 +413,7 @@ async def handle_messages(request: web.Request) -> web.StreamResponse:
                     error_text = await resp.text()
                     log.error("Upstream %d: %s", resp.status, error_text[:200])
                     return web.json_response(
-                        {"error": {"type": "api_error", "message": error_text}},
+                        {"error": {"type": "api_error", "message": "Upstream request failed"}},
                         status=resp.status,
                     )
                 openai_resp = await resp.json()
@@ -422,7 +422,7 @@ async def handle_messages(request: web.Request) -> web.StreamResponse:
     except Exception as e:
         log.error("Upstream error: %s", e)
         return web.json_response(
-            {"error": {"type": "api_error", "message": str(e)}},
+            {"error": {"type": "api_error", "message": "Internal server error"}},
             status=500,
         )
 
@@ -462,11 +462,12 @@ def main():
     app.router.add_get("/", handle_health)
 
     log.info("=== Anthropic -> OpenAI Protocol Proxy ===")
-    log.info("Listen:   http://127.0.0.1:%d", args.port)
+    bind_host = os.environ.get("PROXY_HOST", "127.0.0.1")
+    log.info("Listen:   http://%s:%d", bind_host, args.port)
     log.info("Upstream: %s", UPSTREAM_BASE)
     log.info("Model:    %s", DEFAULT_MODEL)
 
-    web.run_app(app, host="127.0.0.1", port=args.port, print=None)
+    web.run_app(app, host=bind_host, port=args.port, print=None)
 
 
 if __name__ == "__main__":

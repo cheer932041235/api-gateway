@@ -9,4 +9,6 @@ COPY proxy.py codex-proxy.py secrets.example.json ./
 
 EXPOSE 8082 8083 5678
 
+ENV PROXY_HOST=0.0.0.0
+
 CMD ["python", "proxy.py"]

@@ -55,6 +55,7 @@ _secrets = _load_secrets()
 # ── Config ──────────────────────────────────────────────
 PROXY_PORT = 8082
 PANEL_PORT = 8083
+BIND_HOST = os.environ.get("PROXY_HOST", "127.0.0.1")
 SOPHNET_BASE = "https://www.sophnet.com/api/open-apis/anthropic"
 
 # aiproxies.cc (sub2api) — OpenAI 格式中转站
@@ -113,7 +114,7 @@ def handle_exception(e):
     """全局异常捕获，防止进程崩溃"""
     log.error("Unhandled exception: %s", e)
     return Response(
-        json.dumps({"type": "error", "error": {"type": "internal_error", "message": str(e)}}, ensure_ascii=False).encode("utf-8"),
+        json.dumps({"type": "error", "error": {"type": "internal_error", "message": "Internal server error"}}, ensure_ascii=False).encode("utf-8"),
         status=500, content_type="application/json; charset=utf-8"
     )
 
@@ -170,7 +171,7 @@ def _proxy_via_sophnet(data, path):
     except Exception as e:
         log.error("SophNet: %s", e)
         return Response(
-            json.dumps({"type": "error", "error": {"type": "proxy_error", "message": str(e)}}),
+            json.dumps({"type": "error", "error": {"type": "proxy_error", "message": "Upstream request failed"}}),
             status=502, content_type="application/json"
         )
 
@@ -200,7 +201,7 @@ def _proxy_via_mimo(data, path):
     except Exception as e:
         log.error("MiMo: %s", e)
         return Response(
-            json.dumps({"type": "error", "error": {"type": "proxy_error", "message": str(e)}}),
+            json.dumps({"type": "error", "error": {"type": "proxy_error", "message": "Upstream request failed"}}),
             status=502, content_type="application/json"
         )
 
@@ -280,7 +281,7 @@ def _aiproxies_text(anthropic_data, target_model):
         log.info("aiproxies-chat(%s) -> %d (%d bytes)", target_model, resp.status_code, len(resp.content))
     except Exception as e:
         log.error("aiproxies-chat: %s", e)
-        return Response(json.dumps({"type": "error", "error": {"type": "proxy_error", "message": str(e)}}),
+        return Response(json.dumps({"type": "error", "error": {"type": "proxy_error", "message": "Upstream request failed"}}),
                         status=502, content_type="application/json")
 
     if resp.status_code != 200:
@@ -328,7 +329,7 @@ def _aiproxies_image(anthropic_data, target_model):
         log.info("aiproxies-img(%s) -> %d (%d bytes)", target_model, resp.status_code, len(resp.content))
     except Exception as e:
         log.error("aiproxies-img: %s", e)
-        return Response(json.dumps({"type": "error", "error": {"type": "proxy_error", "message": str(e)}}),
+        return Response(json.dumps({"type": "error", "error": {"type": "proxy_error", "message": "Upstream request failed"}}),
                         status=502, content_type="application/json")
 
     if resp.status_code != 200:
@@ -537,14 +538,14 @@ if __name__ == "__main__":
             log.warning("Port %d still in use after 30s — another instance running.", PROXY_PORT)
             sys.exit(0)
     log.info("=== API Gateway Proxy ===")
-    log.info("Proxy:   http://127.0.0.1:%d", PROXY_PORT)
-    log.info("Panel:   http://127.0.0.1:%d", PANEL_PORT)
+    log.info("Proxy:   http://%s:%d", BIND_HOST, PROXY_PORT)
+    log.info("Panel:   http://%s:%d", BIND_HOST, PANEL_PORT)
     log.info("Model:   %s", state['current_model'])
     log.info("Models:  %s", ', '.join(MODELS.keys()))
 
     # Panel on background thread
     panel_thread = threading.Thread(
-        target=lambda: panel_app.run(host="127.0.0.1", port=PANEL_PORT, debug=False),
+        target=lambda: panel_app.run(host=BIND_HOST, port=PANEL_PORT, debug=False),
         daemon=True
     )
     panel_thread.start()
@@ -552,7 +553,7 @@ if __name__ == "__main__":
     # Proxy on main thread — 自动重启循环
     while True:
         try:
-            proxy_app.run(host="127.0.0.1", port=PROXY_PORT, debug=False)
+            proxy_app.run(host=BIND_HOST, port=PROXY_PORT, debug=False)
         except Exception as e:
             log.error("Proxy crashed: %s. Restarting in 3s...", e)
             time.sleep(3)
