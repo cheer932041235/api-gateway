@@ -11,6 +11,9 @@ __pycache__/
 .idea/
 .windsurf/
 
+# Logs
+proxy.log
+
 # OS
 .DS_Store
 Thumbs.db
